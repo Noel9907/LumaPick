@@ -1,13 +1,45 @@
+import sqlite3
 import requests
 import os
 from dotenv import load_dotenv
+from pydantic import BaseModel
+
 load_dotenv()
+conn = sqlite3.connect("test.db")
+cursor = conn.cursor()
 
 api = os.getenv("GOOGLE_DRIVE_KEY")
-def home():
-    t = "https://drive.google.com/drive/folders/16OctDipLvelBRxmwD6eevZ60AAym6gsO?usp=sharing"
-    m=t.find("folders/")
-    l=t.find("?")
-    response = requests.get(f"https://www.googleapis.com/drive/v3/files?q='{t[m+8:l]}'+in+parents+and+mimeType+contains+'image/'&fields=files(id,name,mimeType)&key={api}")
 
-    return(response.json())
+class Albumlink(BaseModel):
+    folderlink : str
+    name:str
+
+class Gallery(BaseModel):
+    name: str
+
+
+async def album(data : Albumlink):
+    cursor.execute("""CREATE TABLE IF NOT EXISTS studio (id INTEGER PRIMARY KEY,file_id TEXT,name,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+    link = data.folderlink
+    m=link.find("folders/")
+    l=link.find("?")
+    print(link[m+8:l])
+    name = data.name
+    response = requests.get(f"https://www.googleapis.com/drive/v3/files?q='{link[m+8:l]}'+in+parents+and+mimeType+contains+'image/'&fields=files(id,name,mimeType)&key={api}").json()
+    cursor.execute("""select * from studio""")
+    for i in response["files"]:
+        cursor.execute("""Insert into studio(file_id,name) VALUES (?,?)""",(i["id"],name))
+    conn.commit()
+    cursor.execute("""select * from studio""")
+    return(cursor.fetchall())
+
+async def GetImage(data:Gallery):
+    cursor.execute("""select * from studio where name = (?)""",(data.name,))
+    i = cursor.fetchall()
+    dic = []
+    for img in i:
+        dic.append(f"https://drive.google.com/thumbnail?id={img[1]}&sz=w1000")
+    return(dic)
+
+    
+
